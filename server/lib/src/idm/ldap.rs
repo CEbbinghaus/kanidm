@@ -60,6 +60,7 @@ pub struct LdapServer {
     basedn: String,
     dnre: Regex,
     binddnre: Regex,
+    fallback_to_primary_cred: bool,
 }
 
 #[derive(Debug)]
@@ -70,7 +71,7 @@ enum LdapBindTarget {
 }
 
 impl LdapServer {
-    pub async fn new(idms: &IdmServer) -> Result<Self, OperationError> {
+    pub async fn new(idms: &IdmServer, fallback_to_primary_cred: bool) -> Result<Self, OperationError> {
         // let ct = duration_from_epoch_now();
         let mut idms_prox_read = idms.proxy_read().await?;
         // This is the rootdse path.
@@ -154,6 +155,7 @@ impl LdapServer {
             basedn,
             dnre,
             binddnre,
+            fallback_to_primary_cred,
         })
     }
 
@@ -434,7 +436,7 @@ impl LdapServer {
         let result = match target {
             LdapBindTarget::Account(uuid) => {
                 let lae = LdapAuthEvent::from_parts(uuid, pw.to_string())?;
-                idm_auth.auth_ldap(&lae, ct).await?
+                idm_auth.auth_ldap(&lae, self.fallback_to_primary_cred, ct).await?
             }
             LdapBindTarget::ApiToken => {
                 let jwsc = JwsCompact::from_str(pw).map_err(|err| {

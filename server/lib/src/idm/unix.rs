@@ -34,7 +34,7 @@ pub(crate) struct UnixUserAccount {
 }
 
 macro_rules! try_from_entry {
-    ($value:expr, $groups:expr) => {{
+    ($value:expr, $groups:expr, $fallback_to_primary_cred:expr) => {{
         if !$value.attribute_equality(Attribute::Class, &EntryClass::Account.to_partialvalue()) {
             return Err(OperationError::InvalidAccountState(
                 "Missing class: account".to_string(),
@@ -99,9 +99,15 @@ macro_rules! try_from_entry {
             .map(|i| i.map(|s| s.to_string()).collect())
             .unwrap_or_default();
 
-        let cred = $value
+        let cred = match $value
             .get_ava_single_credential(Attribute::UnixPassword)
-            .cloned();
+            .cloned()
+        {
+            None if $fallback_to_primary_cred => $value
+                .get_ava_single_credential(Attribute::PrimaryCredential)
+                .cloned(),
+            v => v,
+        };
 
         let radius_secret = $value
             .get_ava_single_secret(Attribute::RadiusSecret)
@@ -140,15 +146,16 @@ impl UnixUserAccount {
         qs: &mut QueryServerWriteTransaction,
     ) -> Result<Self, OperationError> {
         let groups = UnixGroup::try_from_account_entry_rw(value, qs)?;
-        try_from_entry!(value, groups)
+        try_from_entry!(value, groups, false)
     }
 
     pub(crate) fn try_from_entry_ro(
         value: &Entry<EntrySealed, EntryCommitted>,
         qs: &mut QueryServerReadTransaction,
+        fallback_to_primary_cred: bool,
     ) -> Result<Self, OperationError> {
         let groups = UnixGroup::try_from_account_entry_ro(value, qs)?;
-        try_from_entry!(value, groups)
+        try_from_entry!(value, groups, fallback_to_primary_cred)
     }
 
     pub(crate) fn to_unixusertoken(&self, ct: Duration) -> Result<UnixUserToken, OperationError> {

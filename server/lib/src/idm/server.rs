@@ -1285,7 +1285,8 @@ impl<'a> IdmServerAuthTransaction<'a> {
             .qs_read
             .internal_search_uuid(uae.target)
             .and_then(|account_entry| {
-                UnixUserAccount::try_from_entry_ro(account_entry.as_ref(), &mut self.qs_read)
+                // Should we allow fallback for unix auth too? It only makes sense
+                UnixUserAccount::try_from_entry_ro(account_entry.as_ref(), &mut self.qs_read, false)
             })
             .map_err(|e| {
                 admin_error!("Failed to start auth unix -> {:?}", e);
@@ -1387,6 +1388,7 @@ impl<'a> IdmServerAuthTransaction<'a> {
     pub async fn auth_ldap(
         &mut self,
         lae: &LdapAuthEvent,
+        fallback_to_primary_creds: bool,
         ct: Duration,
     ) -> Result<Option<LdapBoundToken>, OperationError> {
         let account_entry = self.qs_read.internal_search_uuid(lae.target).map_err(|e| {
@@ -1423,7 +1425,7 @@ impl<'a> IdmServerAuthTransaction<'a> {
                 return Ok(None);
             }
             let account =
-                UnixUserAccount::try_from_entry_ro(account_entry.as_ref(), &mut self.qs_read)?;
+                UnixUserAccount::try_from_entry_ro(account_entry.as_ref(), &mut self.qs_read, fallback_to_primary_creds)?;
 
             if !account.is_within_valid_time(ct) {
                 security_info!("Account is not within valid time period");
@@ -1557,7 +1559,7 @@ impl<'a> IdmServerProxyReadTransaction<'a> {
             .qs_read
             .impersonate_search_uuid(uute.target, &uute.ident)
             .and_then(|account_entry| {
-                UnixUserAccount::try_from_entry_ro(&account_entry, &mut self.qs_read)
+                UnixUserAccount::try_from_entry_ro(&account_entry, &mut self.qs_read, false)
             })
             .map_err(|e| {
                 admin_error!("Failed to start unix user token -> {:?}", e);

@@ -116,7 +116,8 @@ pub struct ServerConfig {
     ///
     /// If unset, the LDAP server will be disabled.
     pub ldapbindaddress: Option<String>,
-
+    /// Whether in the absence of a POSIX password the primary password should be used
+    pub fallback_to_primary_password: bool,
     /// The role of this server, one of write_replica, write_replica_no_ui, read_only_replica, defaults to [ServerRole::WriteReplica]
     #[serde(default)]
     pub role: ServerRole,
@@ -294,6 +295,9 @@ impl ServerConfig {
                 }
                 "LDAPBINDADDRESS" => {
                     self.ldapbindaddress = Some(value.to_string());
+                }
+                "FALLBACK_TO_PRIMARY_PASSWORD" => {
+                    self.fallback_to_primary_password = value.parse().unwrap_or(false);
                 }
                 "ROLE" => {
                     self.role = ServerRole::from_str(&value).map_err(|err| {
@@ -476,6 +480,7 @@ pub struct IntegrationReplConfig {
 pub struct Configuration {
     pub address: String,
     pub ldapaddress: Option<String>,
+    pub fallback_to_primary_cred: bool,
     pub adminbindpath: String,
     pub threads: usize,
     // db type later
@@ -570,6 +575,7 @@ impl Configuration {
         Configuration {
             address: DEFAULT_SERVER_ADDRESS.to_string(),
             ldapaddress: None,
+            fallback_to_primary_cred: false,
             adminbindpath: env!("KANIDM_ADMIN_BIND_PATH").to_string(),
             threads: std::thread::available_parallelism()
                 .map(|t| t.get())
@@ -647,6 +653,11 @@ impl Configuration {
         self.update_ldapbind(&sconfig.ldapbindaddress);
         self.update_online_backup(&sconfig.online_backup);
         self.update_log_level(&sconfig.log_level);
+        self.update_fallback_to_primary_cred(sconfig.fallback_to_primary_password)
+    }
+
+    pub fn update_fallback_to_primary_cred(&mut self, t: bool) {
+        self.fallback_to_primary_cred = t;
     }
 
     pub fn update_trust_x_forward_for(&mut self, t: Option<bool>) {

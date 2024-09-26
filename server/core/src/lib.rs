@@ -947,7 +947,7 @@ pub async fn create_server_core(
         None => {}
     }
 
-    let ldap = match LdapServer::new(&idms).await {
+    let ldap = match LdapServer::new(&idms, config.fallback_to_primary_cred).await {
         Ok(l) => l,
         Err(e) => {
             error!("Unable to start LdapServer -> {:?}", e);
