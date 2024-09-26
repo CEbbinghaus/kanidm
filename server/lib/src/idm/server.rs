@@ -86,6 +86,7 @@ pub struct IdmServer {
     webauthn: Webauthn,
     oauth2rs: Arc<Oauth2ResourceServers>,
     applications: Arc<LdapApplications>,
+    pub(crate) fallback_to_primary_cred: bool,
 }
 
 /// Contains methods that require writes, but in the context of writing to the idm in memory structures (maybe the query server too). This is things like authentication.
@@ -143,6 +144,7 @@ impl IdmServer {
     pub async fn new(
         qs: QueryServer,
         origin: &str,
+        fallback_to_primary_cred: bool,
     ) -> Result<(IdmServer, IdmServerDelayed, IdmServerAudit), OperationError> {
         let crypto_policy = if cfg!(test) {
             CryptoPolicy::danger_test_minimum()
@@ -223,6 +225,7 @@ impl IdmServer {
                 webauthn,
                 oauth2rs: Arc::new(oauth2rs),
                 applications: Arc::new(applications),
+                fallback_to_primary_cred,
             },
             IdmServerDelayed { async_rx },
             IdmServerAudit { audit_rx },
@@ -1424,8 +1427,11 @@ impl<'a> IdmServerAuthTransaction<'a> {
                 security_info!("Bind not allowed through Unix passwords.");
                 return Ok(None);
             }
-            let account =
-                UnixUserAccount::try_from_entry_ro(account_entry.as_ref(), &mut self.qs_read, fallback_to_primary_creds)?;
+            let account = UnixUserAccount::try_from_entry_ro(
+                account_entry.as_ref(),
+                &mut self.qs_read,
+                fallback_to_primary_creds,
+            )?;
 
             if !account.is_within_valid_time(ct) {
                 security_info!("Account is not within valid time period");

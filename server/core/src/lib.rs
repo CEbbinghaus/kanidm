@@ -114,8 +114,12 @@ async fn setup_qs_idms(
 
     // We generate a SINGLE idms only!
 
-    let (idms, idms_delayed, idms_audit) =
-        IdmServer::new(query_server.clone(), &config.origin).await?;
+    let (idms, idms_delayed, idms_audit) = IdmServer::new(
+        query_server.clone(),
+        &config.origin,
+        config.fallback_to_primary_cred,
+    )
+    .await?;
 
     Ok((query_server, idms, idms_delayed, idms_audit))
 }
@@ -947,7 +951,7 @@ pub async fn create_server_core(
         None => {}
     }
 
-    let ldap = match LdapServer::new(&idms, config.fallback_to_primary_cred).await {
+    let ldap = match LdapServer::new(&idms).await {
         Ok(l) => l,
         Err(e) => {
             error!("Unable to start LdapServer -> {:?}", e);
