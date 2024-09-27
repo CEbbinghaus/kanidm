@@ -172,6 +172,7 @@ pub enum Attribute {
     Uuid,
     Version,
     WebauthnAttestationCaList,
+    AllowPrimaryCredFallback,
 
     #[cfg(any(debug_assertions, test, feature = "test"))]
     NonExist,

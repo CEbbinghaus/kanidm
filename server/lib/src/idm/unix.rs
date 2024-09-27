@@ -34,7 +34,7 @@ pub(crate) struct UnixUserAccount {
 }
 
 macro_rules! try_from_entry {
-    ($value:expr, $groups:expr, $fallback_to_primary_cred:expr) => {{
+    ($value:expr, $groups:expr) => {{
         if !$value.attribute_equality(Attribute::Class, &EntryClass::Account.to_partialvalue()) {
             return Err(OperationError::InvalidAccountState(
                 "Missing class: account".to_string(),
@@ -99,15 +99,9 @@ macro_rules! try_from_entry {
             .map(|i| i.map(|s| s.to_string()).collect())
             .unwrap_or_default();
 
-        let cred = match $value
+        let cred = $value
             .get_ava_single_credential(Attribute::UnixPassword)
-            .cloned()
-        {
-            None if $fallback_to_primary_cred => $value
-                .get_ava_single_credential(Attribute::PrimaryCredential)
-                .cloned(),
-            v => v,
-        };
+            .cloned();
 
         let radius_secret = $value
             .get_ava_single_secret(Attribute::RadiusSecret)
@@ -146,16 +140,15 @@ impl UnixUserAccount {
         qs: &mut QueryServerWriteTransaction,
     ) -> Result<Self, OperationError> {
         let groups = UnixGroup::try_from_account_entry_rw(value, qs)?;
-        try_from_entry!(value, groups, false)
+        try_from_entry!(value, groups)
     }
 
     pub(crate) fn try_from_entry_ro(
         value: &Entry<EntrySealed, EntryCommitted>,
         qs: &mut QueryServerReadTransaction,
-        fallback_to_primary_cred: bool,
     ) -> Result<Self, OperationError> {
         let groups = UnixGroup::try_from_account_entry_ro(value, qs)?;
-        try_from_entry!(value, groups, fallback_to_primary_cred)
+        try_from_entry!(value, groups)
     }
 
     pub(crate) fn to_unixusertoken(&self, ct: Duration) -> Result<UnixUserToken, OperationError> {
@@ -521,5 +514,45 @@ impl UnixGroup {
             uuid: self.uuid,
             gidnumber: self.gidnumber,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ValueSetAddress, ValueSetEmailAddress};
+    use crate::repl::cid::Cid;
+    use crate::value::{Address, PartialValue, Value};
+    use crate::valueset::{self, ValueSet};
+
+    #[test]
+    fn test_pre_create_uuid_empty() {
+        let preload: Vec<Entry<EntryInit, EntryNew>> = Vec::with_capacity(0);
+
+        let mut e = entry_init!(
+            (Attribute::Class, EntryClass::Person.to_value()),
+            (Attribute::Class, EntryClass::Account.to_value()),
+            (Attribute::Name, Value::new_iname("testperson")),
+            (
+                Attribute::DisplayName,
+                Value::Utf8("Test Person".to_string())
+            ),
+            (
+                Attribute::Uuid,
+                Value::Uuid(uuid::uuid!("79724141-3603-4060-b6bb-35c72772611d"))
+            )
+        );
+
+        let vs = e.get_ava_mut(Attribute::Uuid).unwrap();
+        vs.clear();
+        let create = vec![e.clone()];
+        run_create_test!(
+            Err(OperationError::Plugin(PluginError::Base(
+                "Uuid format invalid".to_string()
+            ))),
+            preload,
+            create,
+            None,
+            |_| {}
+        );
     }
 }
